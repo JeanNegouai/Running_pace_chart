@@ -1,0 +1,72 @@
+from bottle import Bottle, request, response, abort
+import json 
+
+# Creating the bottle application 
+app = Bottle()
+
+# Converting the pace (minute per mile) to seconds per mile
+def pace_to_seconds(pace):
+    minutes, seconds = map(int, pace.split(":")) # pace.split splits the string into two (8:25 = ['8', '25']), map(int) converts strings into integers
+    return (minutes * 60) + seconds # switches the minutes to seconds and adds the seconds. 8 * 60 + 25 = 
+
+# Converting all km to miles and calculates the time it takes to complete a distance depending on the pace
+def calculate_time(pace):
+    pace_seconds = pace_to_seconds(pace) # Storing the function pace_to_seconds in pace_seconds to avoid calling the function for all calculation
+
+    # Distances used for calculations. Some are converted into miles. Using a dictionary to associate distance with time
+    distances = {
+        '5K': 3.107, # 5K = 3.1 miles
+        '5 miles': 5,
+        '10K': 6.214, # 10K = 6.2 miles 
+        '15K': 9.321, # 15K = 9.3 miles 
+        '10 miles': 10,
+        'Half marathon': 13.109, # 21K = 13.1 miles
+        'Marathon': 26.219, # 42.1K = 26.2 miles 
+        '50K': 31.068, # 50K = 31 miles
+        '50 miles': 50,
+        '100 miles': 100
+    }
+
+    time_details = {} # This is used to store the time needed for each distance after it's calculated
+
+    for distance_name, distance_in_miles in distances.items(): # loops through the distances dictionary. for example, distance_name = 15K, distance_in_miles = 9.3
+        total_seconds = pace_seconds * distance_in_miles # calculates the total time of race in seconds 
+        hours = total_seconds // 3600 # calculates the total seconds in hours (// discards the remainder)
+        minutes = (total_seconds % 3600) // 60 # calculates the total seconds in minute (% calculates the remainder)
+        seconds = total_seconds % 60 # Calculates the remainder of seconds 
+        time_details[distance_name] = f'{int(hours)}:{int(minutes):02}:{int(seconds):02}' # f string formats the time in a friendly user way. 02 is used to display 2 digits for minutes and seconds
+
+    return time_details # returns the calculated time for each distance pace entered as a query
+
+# API endpoint to receive pace and return calculated times
+@app.route ('/pace', method= 'GET') # defines the URL endpoint (/pace is the endpoint of the web app) 
+def get_pace_time(): # This function is executed when the GET request to pace
+    pace = request.query.pace # Accesses the value of the pace query parameter entered by the user. For example 10:47
+        
+    # Validate the pace format: 
+    if pace is None or pace == '': # Checks if the pace parameter was not included or empty
+            abort(400, "Please enter a valid pace such as '8:25'")
+
+    # Validate the pace format using try-except
+    try:
+            minutes, seconds = map(int, pace.split(":"))
+            if not (1 <= minutes <= 100) or not (0 <= seconds <= 59): 
+                abort(400, "Invalid pace format (out of range). It should be in the form of mm:ss, for example: 11:59 not 11:60") 
+    except ValueError: # Check if user inputs something else than numbers ("abc" instead of 5:02)
+            abort(400, "Invalid pace format. It should be in the form of mm:ss.")
+        
+    # Calculate the time for different distance at a given pace
+    times = calculate_time(pace) 
+
+    # Set Content-Type to application/json
+    response.content_type = 'application/json'
+
+    # Return the calculated time as Json response 
+    return json.dumps({'Pace': pace, 'Times': times}, indent=4) # Ensures that the calculated race times are returned to the user as JSON response when the API end point is called ('/pace') 
+
+# Starting the bottle web server 
+app.run(host='localhost', port=8080, debug=True) # Localhost, this server is only accessible from this laptop
+                                                # port= 8080, common port used to development and testing web server
+                                                # debug=True, gives helpful error messages
+
+# http://localhost:8080/pace?pace=11:11 ? start of the query string, pace = key, 11:11 = value, pace=11:11 query parameter
